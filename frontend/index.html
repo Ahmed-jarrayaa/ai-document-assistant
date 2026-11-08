@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assistant documentaire</title>
+<style>
+  :root {
+    --paper: #F4F5F1;
+    --surface: #FFFFFF;
+    --ink: #1B2430;
+    --ink-soft: #566170;
+    --line: #D9DDD6;
+    --accent: #2D4BE0;
+    --accent-tint: #E6EAFB;
+    --ok: #1E7A4F;
+    --warn: #A35F00;
+    --bad: #B3261E;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); }
+  button { font: inherit; cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* En-tête */
+  .top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .75rem 2rem; padding: 1.25rem clamp(1rem, 4vw, 3rem); border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font: 600 1.5rem/1.2 var(--serif); letter-spacing: -.01em; }
+  .status { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin: 0; padding: 0; list-style: none; font-size: .875rem; color: var(--ink-soft); }
+  .status li::before { content: ""; display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .45rem; background: var(--line); }
+  .status li[data-state="ok"]::before { background: var(--ok); }
+  .status li[data-state="down"]::before { background: var(--bad); }
+
+  /* Mise en page */
+  .layout { display: grid; grid-template-columns: 19rem minmax(0, 1fr); min-height: calc(100vh - 4.5rem); }
+  .shelf { padding: 1.5rem clamp(1rem, 2.5vw, 2rem); border-right: 1px solid var(--line); }
+  main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 56rem; }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    .shelf { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+  h2 { margin: 0 0 .75rem; font: 600 1rem/1.3 var(--sans); }
+
+  /* Documents */
+  .docs { list-style: none; margin: 0 0 1rem; padding: 0; }
+  .docs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .1rem .75rem; padding: .6rem 0; border-bottom: 1px solid var(--line); }
+  .doc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .doc-count { grid-column: 1; font-size: .8125rem; color: var(--ink-soft); }
+  .docs li button { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .empty { margin: 0 0 1rem; font-size: .9375rem; color: var(--ink-soft); }
+  .drop { display: block; padding: 1rem; margin-bottom: .75rem; border: 1.5px dashed var(--ink-soft); border-radius: 8px; text-align: center; cursor: pointer; color: var(--ink-soft); overflow-wrap: anywhere; }
+  .drop:hover, .drop.over, .drop:focus-within { border-color: var(--accent); color: var(--ink); background: var(--accent-tint); }
+  .drop:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  /* Boutons */
+  .primary { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: .6rem 1.1rem; font-weight: 600; }
+  .primary:disabled { background: #AEB6D9; cursor: not-allowed; }
+  .link-danger { background: none; border: 0; color: var(--bad); padding: .25rem .4rem; text-decoration: underline; font-size: .875rem; }
+
+  /* Question */
+  #question { display: block; width: 100%; min-height: 6.5rem; resize: vertical; padding: 1rem 1.1rem; font: 1.375rem/1.4 var(--serif); color: var(--ink); background: var(--surface); border: 1px solid var(--ink); border-radius: 8px; }
+  #question::placeholder { color: #6E7887; }
+  .ask-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .6rem; }
+  .hint { font-size: .8125rem; color: var(--ink-soft); }
+  .msg { min-height: 1.5rem; margin: .75rem 0 0; font-size: .9375rem; color: var(--ink-soft); }
+  .msg[data-error="true"] { color: var(--bad); }
+
+  /* Réponse */
+  #result { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+  .route { display: inline-flex; align-items: center; gap: .5rem; font-size: .9375rem; font-weight: 600; }
+  .route::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%; background: currentColor; }
+  .route[data-state="ok"] { color: var(--ok); }
+  .route[data-state="warn"] { color: var(--warn); }
+  .answer { max-width: 68ch; margin: .75rem 0 0; font: 1.1875rem/1.7 var(--serif); white-space: pre-wrap; }
+  .meta { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin-top: 1rem; font-size: .875rem; color: var(--ink-soft); }
+  .meta a { color: var(--accent); }
+
+  /* Sources */
+  #sources-title { margin-top: 2rem; }
+  .sources { list-style: none; margin: 0; padding: 0; }
+  .sources details { border-bottom: 1px solid var(--line); }
+  .sources summary { display: grid; grid-template-columns: auto minmax(0, 1fr) 4.5rem 3rem; gap: .75rem; align-items: center; padding: .7rem 0; cursor: pointer; list-style: none; }
+  .sources summary::-webkit-details-marker { display: none; }
+  .chip { background: var(--accent-tint); color: var(--accent); padding: .1rem .55rem; border-radius: 4px; font-weight: 600; font-size: .875rem; }
+  .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); font-size: .875rem; }
+  .gauge { height: .35rem; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .gauge span { display: block; height: 100%; background: var(--accent); }
+  .score { font-size: .8125rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; text-align: right; }
+  .excerpt { max-width: 68ch; margin: 0 0 .9rem; color: var(--ink-soft); font: .9375rem/1.6 var(--serif); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Assistant documentaire</h1>
+  <ul class="status" aria-label="État des services">
+    <li id="st-db" data-state="unknown">Base de données <span class="state">…</span></li>
+    <li id="st-llm" data-state="unknown">Modèle de langage <span class="state">…</span></li>
+  </ul>
+</header>
+
+<div class="layout">
+  <aside class="shelf" aria-labelledby="docs-title">
+    <h2 id="docs-title">Documents</h2>
+    <ul id="doc-list" class="docs"></ul>
+    <p id="doc-empty" class="empty" hidden>Aucun document pour l’instant. Ajoutez un PDF pour commencer.</p>
+
+    <form id="upload-form">
+      <label class="drop" id="drop">
+        <input type="file" id="file" class="sr-only" accept="application/pdf,.pdf">
+        <span id="drop-text">Choisir un PDF ou le déposer ici</span>
+      </label>
+      <button type="submit" id="upload-btn" class="primary" disabled>Indexer le PDF</button>
+      <p id="upload-msg" class="msg" role="status"></p>
+    </form>
+  </aside>
+
+  <main>
+    <form id="ask-form">
+      <label for="question" class="sr-only">Votre question</label>
+      <textarea id="question" rows="3" maxlength="1000" placeholder="Posez une question sur vos documents" required></textarea>
+      <div class="ask-row">
+        <span class="hint">Entrée pour envoyer, Maj+Entrée pour un retour à la ligne.</span>
+        <button type="submit" id="ask-btn" class="primary">Poser la question</button>
+      </div>
+    </form>
+    <p id="ask-status" class="msg" role="status"></p>
+
+    <section id="result" hidden aria-live="polite">
+      <span id="route" class="route"></span>
+      <p id="answer" class="answer"></p>
+      <div class="meta">
+        <span id="meta-score"></span>
+        <span id="meta-time"></span>
+        <a id="meta-trace" href="#" target="_blank" rel="noopener" hidden>Voir la trace dans Jaeger</a>
+      </div>
+      <h2 id="sources-title" hidden>Passages utilisés</h2>
+      <div id="sources" class="sources"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+  const API_BASE = "http://127.0.0.1:8000";                          // même origine que l’API FastAPI
+  const JAEGER_URL = "http://localhost:16686";  // pour le lien vers la trace
+  const DEFAULT_DROP = "Choisir un PDF ou le déposer ici";
+  const NOT_FOUND_TEXT = "Aucun passage de vos documents ne répond assez bien à cette question. Reformulez-la, ou ajoutez un document qui en parle.";
+
+  const $ = (id) => document.getElementById(id);
+
+  function setMessage(id, text, isError = false) {
+    const el = $(id);
+    el.textContent = text;
+    el.dataset.error = String(isError);
+  }
+
+  // Appel API : renvoie le JSON, ou lève une Error avec un message lisible
+  async function api(path, options) {
+    let response;
+    try {
+      response = await fetch(API_BASE + path, options);
+    } catch {
+      throw new Error("Impossible de joindre l’API. Le serveur est-il démarré ?");
+    }
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const body = await response.json();
+        detail = typeof body.detail === "string" ? body.detail : "Requête invalide.";
+      } catch { /* réponse sans JSON */ }
+      const error = new Error(detail || "Erreur " + response.status);
+      error.status = response.status;
+      throw error;
+    }
+    return response.json();
+  }
+
+  function friendly(error) {
+    if (error.status === 503) {
+      return "Un service est indisponible (" + error.message + "). Vérifiez que PostgreSQL et Ollama sont démarrés.";
+    }
+    return error.message;
+  }
+
+  // État des services
+  function setState(id, ok) {
+    const el = $(id);
+    el.dataset.state = ok ? "ok" : "down";
+    el.querySelector(".state").textContent = ok ? "disponible" : "indisponible";
+  }
+
+  async function refreshHealth() {
+    try {
+      const health = await api("/health");
+      setState("st-db", health.database === "ok");
+      setState("st-llm", health.ollama === "ok");
+    } catch {
+      setState("st-db", false);
+      setState("st-llm", false);
+    }
+  }
+
+  // Documents
+  async function loadDocuments() {
+    const docs = await api("/documents");
+    const list = $("doc-list");
+    list.replaceChildren();
+    $("doc-empty").hidden = docs.length > 0;
+    for (const doc of docs) {
+      const item = document.createElement("li");
+
+      const name = document.createElement("span");
+      name.className = "doc-name";
+      name.textContent = doc.source;
+      name.title = doc.source;
+
+      const count = document.createElement("span");
+      count.className = "doc-count";
+      count.textContent = doc.chunks + " passages";
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link-danger";
+      remove.textContent = "Supprimer";
+      remove.setAttribute("aria-label", "Supprimer " + doc.source);
+      remove.addEventListener("click", () => removeDocument(doc.source));
+
+      item.append(name, count, remove);
+      list.append(item);
+    }
+  }
+
+  async function removeDocument(source) {
+    if (!confirm("Supprimer « " + source + " » de l’index ?")) return;
+    try {
+      await api("/documents/" + encodeURIComponent(source), { method: "DELETE" });
+      setMessage("upload-msg", "« " + source + " » supprimé de l’index.");
+      await loadDocuments();
+    } catch (error) {
+      setMessage("upload-msg", friendly(error), true);
+    }
+  }
+
+  // Envoi d’un PDF
+  const fileInput = $("file");
+  const drop = $("drop");
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    $("drop-text").textContent = file ? file.name : DEFAULT_DROP;
+    $("upload-btn").disabled = !file;
+  });
+
+  ["dragenter", "dragover"].forEach((type) =>
+    drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((type) =>
+    drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (event) => {
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event("change"));
+  });
+
+  $("upload-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    $("upload-btn").disabled = true;
+    setMessage("upload-msg", "Indexation en cours… cela peut prendre une minute.");
+    const form = new FormData();
+    form.append("file", file);
+
+    try {
+      const result = await api("/documents", { method: "POST", body: form });
+      let text = "« " + result.source + " » indexé : " + result.chunks + " passages.";
+      if (result.replaced_chunks) text += " L’ancienne version a été remplacée.";
+      setMessage("upload-msg", text);
+      fileInput.value = "";
+      $("drop-text").textContent = DEFAULT_DROP;
+      await loadDocuments();
+    } catch (error) {
+      setMessage("upload-msg", friendly(error), true);
+      $("upload-btn").disabled = false;
+    }
+  });
+
+  // Question
+  const questionBox = $("question");
+  questionBox.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      $("ask-form").requestSubmit();
+    }
+  });
+
+  $("ask-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const question = questionBox.value.trim();
+    if (!question) return;
+
+    const button = $("ask-btn");
+    button.disabled = true;
+    const started = Date.now();
+    setMessage("ask-status", "Recherche et rédaction en cours…");
+    const timer = setInterval(() => {
+      const seconds = Math.round((Date.now() - started) / 1000);
+      setMessage("ask-status", "Recherche et rédaction en cours… " + seconds + " s");
+    }, 1000);
+
+    try {
+      const data = await api("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      renderResult(data, (Date.now() - started) / 1000);
+      setMessage("ask-status", "");
+    } catch (error) {
+      $("result").hidden = true;
+      setMessage("ask-status", friendly(error), true);
+    } finally {
+      clearInterval(timer);
+      button.disabled = false;
+    }
+  });
+
+  function renderResult(data, seconds) {
+    const grounded = data.route === "generate_answer";
+
+    const route = $("route");
+    route.dataset.state = grounded ? "ok" : "warn";
+    route.textContent = grounded ? "Réponse tirée de vos documents" : "Aucun passage assez pertinent";
+
+    // Le serveur ajoute « Sources: ... » à la réponse ; on l’affiche séparément
+    $("answer").textContent = grounded ? data.answer.split("\n\nSources:")[0] : NOT_FOUND_TEXT;
+
+    $("meta-score").textContent = "Pertinence " + data.relevance_score.toFixed(2);
+    $("meta-time").textContent = seconds.toFixed(1) + " s";
+
+    const trace = $("meta-trace");
+    if (data.trace_id) {
+      trace.href = JAEGER_URL + "/trace/" + data.trace_id;
+      trace.hidden = false;
+    } else {
+      trace.hidden = true;
+    }
+
+    const container = $("sources");
+    container.replaceChildren();
+    $("sources-title").hidden = data.sources.length === 0;
+
+    for (const source of data.sources) {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = "p. " + (source.page ?? "?");
+
+      const file = document.createElement("span");
+      file.className = "file";
+      file.textContent = source.source;
+      file.title = source.source;
+
+      const gauge = document.createElement("span");
+      gauge.className = "gauge";
+      const fill = document.createElement("span");
+      fill.style.width = Math.min(100, Math.max(0, source.similarity * 100)) + "%";
+      gauge.append(fill);
+
+      const score = document.createElement("span");
+      score.className = "score";
+      score.textContent = source.similarity.toFixed(2);
+
+      summary.append(chip, file, gauge, score);
+
+      const excerpt = document.createElement("p");
+      excerpt.className = "excerpt";
+      excerpt.textContent = source.excerpt + "…";
+
+      details.append(summary, excerpt);
+      container.append(details);
+    }
+
+    $("result").hidden = false;
+  }
+
+  // Démarrage
+  refreshHealth();
+  loadDocuments().catch((error) => setMessage("upload-msg", friendly(error), true));
+</script>
+</body>
+</html>
