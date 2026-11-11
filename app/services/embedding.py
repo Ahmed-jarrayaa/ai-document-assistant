@@ -27,7 +27,9 @@ def get_model():
                     span.set_attribute("embedding.model", MODEL_NAME)
                     from fastembed import TextEmbedding
 
-                    _model = TextEmbedding(MODEL_NAME)
+                    # threads=1: on small instances (0.5 CPU / 512 MB), onnxruntime
+                    # spawns one thread per core by default, which inflates memory.
+                    _model = TextEmbedding(MODEL_NAME, threads=1)
     return _model
 
 
