@@ -12,5 +12,6 @@ opentelemetry-sdk>=1.27
 opentelemetry-exporter-otlp-proto-http>=1.27
 fastapi>=0.110
 uvicorn>=0.29
+openai>=1.40
 python-multipart>=0.0.9
 opentelemetry-instrumentation-fastapi

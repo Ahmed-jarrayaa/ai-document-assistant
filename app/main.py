@@ -1,5 +1,6 @@
 import os
 import re
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -14,8 +15,9 @@ from app.database.connection import get_connection
 from app.database.vector_store import delete_source, list_sources
 from app.graph.workflow import ask
 from app.monitoring.telemetry import flush_telemetry, setup_telemetry
+from app.services import embedding
+from app.services import embedding
 from app.services import llm
-from app.services.embedding import get_model
 from app.services.ingestion import IngestionError, ingest_pdf
 from app.services.llm import LLMError
 from fastapi.responses import FileResponse
@@ -28,7 +30,9 @@ MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    get_model()  # warm-up: pay the model loading cost once, at startup
+    # Warm-up in the background: the model (torch) loads after the server is
+    # listening, so the port opens immediately even on small instances.
+    threading.Thread(target=embedding.warmup, name="model-warmup", daemon=True).start()
     yield
     flush_telemetry()  # send pending spans on shutdown
 
@@ -79,12 +83,13 @@ def health():
             conn.execute("SELECT 1")
     except Exception as exc:
         database = f"error: {type(exc).__name__}"
-    ollama = "ok" if llm.is_ready() else "unavailable"
+    llm_status = "ok" if llm.is_ready() else "unavailable"
     return {
-        "status": "ok" if database == "ok" and ollama == "ok" else "degraded",
+        "status": "ok" if database == "ok" and llm_status == "ok" else "degraded",
         "database": database,
-        "ollama": ollama,
-        "model": llm.OLLAMA_MODEL,
+        "llm": llm_status,
+        "provider": llm.LLM_PROVIDER,
+        "model": llm.LLM_MODEL,
     }
 
 

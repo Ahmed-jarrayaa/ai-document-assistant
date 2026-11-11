@@ -57,7 +57,7 @@ def cleanup():
 
 def test_health_reports_components(client):
     body = client.get("/health").json()
-    assert {"status", "database", "ollama", "model"} <= set(body)
+    assert {"status", "database", "llm", "model"} <= set(body)
     assert body["database"] == "ok"
 
 
