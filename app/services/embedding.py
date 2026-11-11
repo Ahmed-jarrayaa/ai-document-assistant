@@ -12,10 +12,12 @@ _model_lock = threading.Lock()
 
 
 def get_model():
-    """Load the model once and reuse it (thread-safe).
+    """Load the embedding model once and reuse it (thread-safe).
 
-    The heavy `sentence_transformers` import (torch) is done lazily here,
-    NOT at module import, so the web server starts and binds its port fast.
+    Uses fastembed (ONNX runtime, quantized model) instead of
+    sentence-transformers/torch: ~100 MB of RAM instead of ~700 MB, which
+    lets the app run on small hosting instances (e.g. Render 512 MB).
+    The lazy import keeps the web server starting fast.
     """
     global _model
     if _model is None:
@@ -23,9 +25,9 @@ def get_model():
             if _model is None:  # re-check: another thread may have loaded it
                 with tracer.start_as_current_span("embedding.load_model") as span:
                     span.set_attribute("embedding.model", MODEL_NAME)
-                    from sentence_transformers import SentenceTransformer
+                    from fastembed import TextEmbedding
 
-                    _model = SentenceTransformer(MODEL_NAME)
+                    _model = TextEmbedding(MODEL_NAME)
     return _model
 
 
@@ -39,12 +41,11 @@ def embed_texts(texts: list[str]) -> np.ndarray:
     with tracer.start_as_current_span("embedding.encode") as span:
         span.set_attribute("embedding.model", MODEL_NAME)
         span.set_attribute("embedding.num_texts", len(texts))
-        vectors = get_model().encode(
-            texts,
-            batch_size=32,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )
+        vectors = np.array(list(get_model().embed(texts, batch_size=32)))
+        # Guarantee unit-norm vectors (cosine similarity), like before
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        vectors = vectors / norms
         span.set_attribute("embedding.dimension", int(vectors.shape[1]))
         return vectors
 
