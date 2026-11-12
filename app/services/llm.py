@@ -19,7 +19,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 # --- Groq (cloud, OpenAI-compatible API) ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
 # Model of the ACTIVE provider: used by /health and tracing attributes.
 LLM_MODEL = GROQ_MODEL if LLM_PROVIDER == "groq" else OLLAMA_MODEL
@@ -111,12 +111,12 @@ def _generate_groq(
             "content": f"Context passages:\n\n{context}\n\nQuestion: {question}",
         },
     ]
+    kwargs: dict = {"model": GROQ_MODEL, "messages": messages, "temperature": 0}
+    if "gpt-oss" in GROQ_MODEL:
+        # Reasoning models: keep the hidden reasoning short for snappy answers
+        kwargs["reasoning_effort"] = "low"
     try:
-        response = _get_groq_client().chat.completions.create(
-            model=GROQ_MODEL,
-            messages=messages,
-            temperature=0,
-        )
+        response = _get_groq_client().chat.completions.create(**kwargs)
     except (openai.APIConnectionError, openai.APITimeoutError) as exc:
         raise LLMError(
             f"Cannot reach Groq at {GROQ_BASE_URL}, or it took too long to answer. ({exc})"
