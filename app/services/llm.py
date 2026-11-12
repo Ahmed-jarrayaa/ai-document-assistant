@@ -170,7 +170,17 @@ def is_ready() -> bool:
             if not os.getenv("GROQ_API_KEY", ""):
                 print("[llm] is_ready: GROQ_API_KEY is not set", flush=True)
                 return False
-            _get_groq_client().models.retrieve(GROQ_MODEL)
+            # models.retrieve() puts the model name in the URL path: names with
+            # "/" get percent-encoded (%2F) and Groq answers 404. Listing and
+            # comparing ids is robust.
+            model_ids = {m.id for m in _get_groq_client().models.list().data}
+            if GROQ_MODEL not in model_ids:
+                print(
+                    f"[llm] is_ready: model '{GROQ_MODEL}' is not available on Groq. "
+                    f"Available models: {sorted(model_ids)}",
+                    flush=True,
+                )
+                return False
         else:
             _client.show(OLLAMA_MODEL)
         return True
