@@ -8,7 +8,15 @@ load_dotenv()  # reads the .env file into environment variables
 
 
 def get_connection_string() -> str:
-    """Build the PostgreSQL connection string from environment variables."""
+    """Build the PostgreSQL connection string from environment variables.
+
+    If POSTGRES_URL (or DATABASE_URL) is set — e.g. the "Internal Database
+    URL" of a managed Postgres like Render's — it is used directly.
+    Otherwise the individual POSTGRES_* variables are assembled.
+    """
+    url = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
+    if url:
+        return url
     return (
         f"host={os.getenv('POSTGRES_HOST', 'localhost')} "
         f"port={os.getenv('POSTGRES_PORT', '5433')} "

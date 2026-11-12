@@ -168,10 +168,14 @@ def is_ready() -> bool:
     try:
         if LLM_PROVIDER == "groq":
             if not os.getenv("GROQ_API_KEY", ""):
+                print("[llm] is_ready: GROQ_API_KEY is not set", flush=True)
                 return False
             _get_groq_client().models.retrieve(GROQ_MODEL)
         else:
             _client.show(OLLAMA_MODEL)
         return True
-    except Exception:
+    except Exception as exc:
+        # Log the real reason so hosting dashboards (Render...) show why the
+        # LLM is "unavailable" instead of a bare degraded status.
+        print(f"[llm] is_ready failed: {type(exc).__name__}: {exc}", flush=True)
         return False
