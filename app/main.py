@@ -128,6 +128,10 @@ def upload_document(file: UploadFile = File(...)):
     except IngestionError as exc:
         path.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        # Surface unexpected errors instead of a bare 500
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
 
 @app.get("/documents")
@@ -151,6 +155,10 @@ def ask_question(request: AskRequest):
         raise HTTPException(status_code=503, detail=f"Language model unavailable: {exc}")
     except psycopg.OperationalError:
         raise HTTPException(status_code=503, detail="Database unavailable.")
+    except Exception as exc:
+        # Surface unexpected errors in the response (instead of a bare 500) so
+        # they are visible in the frontend and do not require reading logs.
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
     sources = [
         SourceRef(
