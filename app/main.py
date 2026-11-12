@@ -12,6 +12,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import BaseModel, StringConstraints
 
 from app.database.connection import get_connection
+from app.database.schema import ensure_schema
 from app.database.vector_store import delete_source, list_sources
 from app.graph.workflow import ask
 from app.monitoring.telemetry import flush_telemetry, setup_telemetry
@@ -28,11 +29,24 @@ DOCUMENTS_DIR = Path(__file__).resolve().parent.parent / "documents"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024
 
 
+def _bootstrap() -> None:
+    """Background startup work: create the DB schema, warm up the embeddings.
+
+    Runs after the server is listening, so the port opens immediately even
+    on small instances. Failures are logged but never prevent serving.
+    """
+    try:
+        ensure_schema()
+    except Exception as exc:
+        print(
+            f"[startup] schema init skipped: {type(exc).__name__}: {exc}", flush=True
+        )
+    embedding.warmup()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm-up in the background: the model (torch) loads after the server is
-    # listening, so the port opens immediately even on small instances.
-    threading.Thread(target=embedding.warmup, name="model-warmup", daemon=True).start()
+    threading.Thread(target=_bootstrap, name="startup-bootstrap", daemon=True).start()
     yield
     flush_telemetry()  # send pending spans on shutdown
 
